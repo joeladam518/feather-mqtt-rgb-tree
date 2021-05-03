@@ -312,7 +312,6 @@ void setup()
     // initialize neopixel
     if (xSemaphoreTake(ringMutex, 100 / portTICK_PERIOD_MS) == pdTRUE) {
         ring.begin(); // Also initializes the pinmode and state
-        Serial.println("Line 272");
         ring.off();   // Turn OFF all pixels
 
         xSemaphoreGive(ringMutex);
