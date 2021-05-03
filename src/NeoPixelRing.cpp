@@ -92,6 +92,7 @@ void NeoPixelRing::rainbow(uint8_t wait)
         vTaskDelay(wait);
     }
 }
+
 void NeoPixelRing::rainbowCycle(uint8_t wait)
 {
     uint16_t i, j;
@@ -106,6 +107,7 @@ void NeoPixelRing::rainbowCycle(uint8_t wait)
         vTaskDelay(wait);
     }
 }
+
 RGB NeoPixelRing::unpackColor(uint32_t color)
 {
     RGB unpackedColor;
