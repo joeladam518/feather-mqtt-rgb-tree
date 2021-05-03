@@ -1,5 +1,5 @@
-#ifndef __NEO_PIXEL_RING__
-#define __NEO_PIXEL_RING__
+#ifndef __NEO_PIXEL_RING_CLASS_H__
+#define __NEO_PIXEL_RING_CLASS_H__
 
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
@@ -8,7 +8,7 @@
 class NeoPixelRing
 {
 private:
-    Adafruit_NeoPixel *ring;
+    Adafruit_NeoPixel *neoPixel;
 
 public:
     // Consturctors
@@ -16,7 +16,8 @@ public:
     // Destructor
     //~NeoPixelRing();
     // Methods
-    
+
+    void begin();
     void fadeColor(uint8_t r, uint8_t g, uint8_t b, int fadeTime);
     void fadeColor(RGB *endColor, int fadeTime);
     RGB getColor(void);
