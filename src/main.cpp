@@ -319,7 +319,7 @@ void setup()
     }
 
     vTaskResume(mqttTaskHandle);
-    vTaskDelete(NULL);
+    vTaskDelete(NULL); // NOTE: removes the setup() and loop() task
 }
 
 // NOTE: Loop is excuted on core #1
