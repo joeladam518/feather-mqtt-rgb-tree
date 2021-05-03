@@ -30,46 +30,32 @@
  */
 Adafruit_NeoPixel neoPixel(NEO_PIXEL_COUNT, NEO_PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
-/**
- *  My implementation of the neopixel ring in object form.
- */
+// work with the neo pixels in object form
 NeoPixelRing ring(&neoPixel);
 
-/**
- * The Wifi client;
- */
+// Wifi client
 WiFiClient client;
 
-/**
- *  MQTT CLient connecting to my home mqtt broker
- */
+// Mqtt client
 Adafruit_MQTT_Client mqtt(&client, MQTT_BROKER, MQTT_PORT);
 
-/**
- *  MQTT Client subscrtiptions
- */
+// Mqtt client subscriptons
 Adafruit_MQTT_Subscribe setColor = Adafruit_MQTT_Subscribe(&mqtt, SUB_SET_COLOR);
 Adafruit_MQTT_Subscribe getColor = Adafruit_MQTT_Subscribe(&mqtt, SUB_GET_COLOR);
 //Adafruit_MQTT_Subscribe rainbow  = Adafruit_MQTT_Subscribe(&mqtt, SUB_RAINBOW);
 
-/**
- * Task Handles
- */
+// Task handles
 static TaskHandle_t mqttTaskHandle = NULL;
 static TaskHandle_t processCallbacksTaskHandle = NULL;
 
-/**
- * Queues
- */
+// Queues
 static QueueHandle_t mqttCallbackQueue;
 
-/**
- * Mutexes
- */
+// Mutexes
 static SemaphoreHandle_t ringMutex;
 
 //==============================================================================
-// Mqtt Call Backs
+// Mqtt Callbacks
 
 // void rainbowCallback(struct pt *pt)
 // {
@@ -294,8 +280,8 @@ void setup()
         2048,            // Stack size (bytes in ESP32, words in FreeRTOS)
         NULL,            // Parameter to pass to function
         1,               // Task priority (0 to configMAX_PRIORITIES - 1)
-        &mqttTaskHandle, // Ask handle
-        PRO_CPU_NUM      // Run on one core
+        &mqttTaskHandle, // Task handle
+        PRO_CPU_NUM      // Run on core
     );
     vTaskSuspend(mqttTaskHandle);
 
@@ -305,8 +291,8 @@ void setup()
         2048,                        // Stack size (bytes in ESP32, words in FreeRTOS)
         NULL,                        // Parameter to pass to function
         1,                           // Task priority (0 to configMAX_PRIORITIES - 1)
-        &processCallbacksTaskHandle, // Ask handle
-        APP_CPU_NUM                  // Run on one core
+        &processCallbacksTaskHandle, // Task handle
+        APP_CPU_NUM                  // Run on core
     );
 
     // initialize neopixel
