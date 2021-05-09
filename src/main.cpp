@@ -115,7 +115,7 @@ void setup()
     );
 
     // Initialize neopixel ring
-    if (xSemaphoreTake(ringMutex, 100 / portTICK_PERIOD_MS) == pdTRUE) {
+    if (xSemaphoreTake(ringMutex, 150 / portTICK_PERIOD_MS) == pdTRUE) {
         ring.begin();
 
         xSemaphoreGive(ringMutex);
@@ -235,7 +235,7 @@ void setColorCallback(char *data, uint16_t len)
     color.b = doc["b"].as<uint8_t>();
     int time = doc["time"];
 
-    #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+    #if false && defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
         printColor(&color);
         printTime(time);
     #endif

@@ -38,11 +38,10 @@ void NeoPixelRing::fadeColor(uint8_t r, uint8_t g, uint8_t b, int fadeTime)
         color.b = map(i, 0, fadeTime, startColor.b, b);
 
         setColor(&color);
-        vTaskDelay(1); // block
     }
 
-    setColor(r,g,b);
-    vTaskDelay(5); // block
+    setColor(r, g, b);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
 void NeoPixelRing::fadeColor(RGB *endColor, int fadeTime)
@@ -68,7 +67,7 @@ void NeoPixelRing::setColor(uint8_t r, uint8_t g, uint8_t b)
     }
 
     neoPixel->show();
-    vTaskDelay(5);
+    vTaskDelay(5 / portTICK_PERIOD_MS);
 }
 
 void NeoPixelRing::setColor(RGB *color)
@@ -78,7 +77,7 @@ void NeoPixelRing::setColor(RGB *color)
     }
 
     neoPixel->show();
-    vTaskDelay(5);
+    vTaskDelay(5 / portTICK_PERIOD_MS);
 }
 
 void NeoPixelRing::rainbow(uint8_t wait)
@@ -89,7 +88,7 @@ void NeoPixelRing::rainbow(uint8_t wait)
             neoPixel->setPixelColor(i, wheel((i + j) & 255));
         }
         neoPixel->show();
-        vTaskDelay(wait);
+        vTaskDelay(wait / portTICK_PERIOD_MS);
     }
 }
 
@@ -104,7 +103,7 @@ void NeoPixelRing::rainbowCycle(uint8_t wait)
         }
 
         neoPixel->show();
-        vTaskDelay(wait);
+        vTaskDelay(wait / portTICK_PERIOD_MS);
     }
 }
 
@@ -141,7 +140,7 @@ void NeoPixelRing::wipeColor(uint8_t r, uint8_t g, uint8_t b)
     for(uint16_t i = 0; i < neoPixel->numPixels(); i++) {
         neoPixel->setPixelColor(i, r, g, b);
         neoPixel->show();
-        vTaskDelay(50);
+        vTaskDelay(50 / portTICK_PERIOD_MS);
     }
 }
 
@@ -150,6 +149,6 @@ void NeoPixelRing::wipeColor(RGB *color)
     for(uint16_t i = 0; i < neoPixel->numPixels(); i++) {
         neoPixel->setPixelColor(i, color->r, color->g, color->b);
         neoPixel->show();
-        vTaskDelay(50);
+        vTaskDelay(50 / portTICK_PERIOD_MS);
     }
 }
