@@ -1,16 +1,15 @@
 #include <Arduino.h>
 #include <HardwareSerial.h>
 #include <Adafruit_NeoPixel.h>
+#include "led.h"
 #include "NeoPixelRing.h"
-#include "ColorLed.h"
 
 //-------------------------------
 // Constructor
 //-------------------------------
-NeoPixelRing::NeoPixelRing(Adafruit_NeoPixel *neoPixel): neoPixel(neoPixel)
-{
-    // Do Nothing
-}
+NeoPixelRing::NeoPixelRing(Adafruit_NeoPixel *neoPixel):
+    neoPixel(neoPixel)
+{}
 
 //-------------------------------
 // Destructor
@@ -25,6 +24,7 @@ NeoPixelRing::NeoPixelRing(Adafruit_NeoPixel *neoPixel): neoPixel(neoPixel)
 void NeoPixelRing::begin()
 {
     neoPixel->begin();
+    off();
 }
 
 void NeoPixelRing::fadeColor(uint8_t r, uint8_t g, uint8_t b, int fadeTime)
@@ -108,6 +108,7 @@ void NeoPixelRing::rainbowCycle(uint8_t wait)
     }
 }
 
+// TODO make sure this uses dynamic memeory
 RGB NeoPixelRing::unpackColor(uint32_t color)
 {
     RGB unpackedColor;
