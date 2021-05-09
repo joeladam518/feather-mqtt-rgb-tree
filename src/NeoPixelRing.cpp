@@ -38,10 +38,11 @@ void NeoPixelRing::fadeColor(uint8_t r, uint8_t g, uint8_t b, int fadeTime)
         color.b = map(i, 0, fadeTime, startColor.b, b);
 
         setColor(&color);
+        vTaskDelay(5);
     }
 
     setColor(r, g, b);
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    vTaskDelay(5);
 }
 
 void NeoPixelRing::fadeColor(RGB *endColor, int fadeTime)
@@ -62,22 +63,22 @@ void NeoPixelRing::off(void)
 
 void NeoPixelRing::setColor(uint8_t r, uint8_t g, uint8_t b)
 {
-    for (uint16_t i = 0; i < neoPixel->numPixels(); i++) {
+    uint16_t i;
+    for (i = 0; i < neoPixel->numPixels(); i++) {
         neoPixel->setPixelColor(i, r, g, b);
     }
 
     neoPixel->show();
-    vTaskDelay(5 / portTICK_PERIOD_MS);
 }
 
 void NeoPixelRing::setColor(RGB *color)
 {
-    for (uint16_t i = 0; i < neoPixel->numPixels(); i++) {
+    uint16_t i;
+    for (i = 0; i < neoPixel->numPixels(); i++) {
         neoPixel->setPixelColor(i, color->r, color->g, color->b);
     }
 
     neoPixel->show();
-    vTaskDelay(5 / portTICK_PERIOD_MS);
 }
 
 void NeoPixelRing::rainbow(uint8_t wait)
@@ -87,8 +88,9 @@ void NeoPixelRing::rainbow(uint8_t wait)
         for(i = 0; i < neoPixel->numPixels(); i++) {
             neoPixel->setPixelColor(i, wheel((i + j) & 255));
         }
+
         neoPixel->show();
-        vTaskDelay(wait / portTICK_PERIOD_MS);
+        vTaskDelay(wait);
     }
 }
 
@@ -103,7 +105,7 @@ void NeoPixelRing::rainbowCycle(uint8_t wait)
         }
 
         neoPixel->show();
-        vTaskDelay(wait / portTICK_PERIOD_MS);
+        vTaskDelay(wait);
     }
 }
 
@@ -137,18 +139,20 @@ uint32_t NeoPixelRing::wheel(uint8_t wheelPos)
 
 void NeoPixelRing::wipeColor(uint8_t r, uint8_t g, uint8_t b)
 {
-    for(uint16_t i = 0; i < neoPixel->numPixels(); i++) {
+    uint16_t i;
+    for (i = 0; i < neoPixel->numPixels(); i++) {
         neoPixel->setPixelColor(i, r, g, b);
         neoPixel->show();
-        vTaskDelay(50 / portTICK_PERIOD_MS);
+        vTaskDelay(5);
     }
 }
 
 void NeoPixelRing::wipeColor(RGB *color)
 {
-    for(uint16_t i = 0; i < neoPixel->numPixels(); i++) {
+    uint16_t i;
+    for (i = 0; i < neoPixel->numPixels(); i++) {
         neoPixel->setPixelColor(i, color->r, color->g, color->b);
         neoPixel->show();
-        vTaskDelay(50 / portTICK_PERIOD_MS);
+        vTaskDelay(5);
     }
 }

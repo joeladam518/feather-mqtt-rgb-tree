@@ -91,7 +91,7 @@ void setup()
 
     // Configure RTOS
     ringMutex = xSemaphoreCreateMutex();
-    mqttCallbackQueue = xQueueCreate(5, sizeof(CallbackBufferObject));
+    mqttCallbackQueue = xQueueCreate(3, sizeof(CallbackBufferObject));
 
     xTaskCreatePinnedToCore(
         mqttTask,        // Function to be called
@@ -115,7 +115,7 @@ void setup()
     );
 
     // Initialize neopixel ring
-    if (xSemaphoreTake(ringMutex, 150 / portTICK_PERIOD_MS) == pdTRUE) {
+    if (xSemaphoreTake(ringMutex, 0) == pdTRUE) {
         ring.begin();
 
         xSemaphoreGive(ringMutex);
@@ -133,22 +133,25 @@ void loop() {}
 
 void mqttTask(void *parameter)
 {
+    Adafruit_MQTT_Subscribe *subscription;
+
     while (1) {
         mqttConnect();
 
-        // Should this only push the call back to a process queue?
-        Adafruit_MQTT_Subscribe *subscription;
-        while ((subscription = mqtt.readSubscription(5000))) {
+        while ((subscription = mqtt.readSubscription(2500))) {
             if (subscription == &getColor || subscription == &setColor) {
                 CallbackBufferObject callbackObj;
                 setCallbackObject(&callbackObj, subscription);
 
                 if (callbackObj.callback != NULL) {
-                    xQueueSend(mqttCallbackQueue, (void *)&callbackObj, 10);
+                    Serial.println(F("Sending to queue..."));
+                    xQueueSend(mqttCallbackQueue, (void *)&callbackObj, 0);
+                    vTaskDelay(250 / portTICK_PERIOD_MS);
+                    break;
                 } else {
                     #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
                         Serial.println(F(""));
-                        Serial.println(F("!! Callback couldn't be set to the queue !!"));
+                        Serial.println(F("!! Callback couldn't be set to the queue... !!"));
                         Serial.println(F(""));
                     #endif
                 }
@@ -161,9 +164,12 @@ void processCallbacksTask(void *parameter)
 {
     while (1) {
         CallbackBufferObject callbackObj;
-        if (xQueueReceive(mqttCallbackQueue, (void *)&callbackObj, 5) == pdTRUE) {
+        if (xQueueReceive(mqttCallbackQueue, (void *)&callbackObj, 0) == pdTRUE) {
+            Serial.println(F("ProcessCallbacksTask: Calling callback..."));
             callbackObj.callback(callbackObj.data, callbackObj.length);
         }
+
+        vTaskDelay(100 / portTICK_PERIOD_MS);
     }
 }
 
@@ -188,19 +194,17 @@ void getColorCallback(char *data, uint16_t len)
     const int capacity = JSON_OBJECT_SIZE(3);
     StaticJsonDocument<capacity> doc;
 
-    if (xSemaphoreTake(ringMutex, 0) == pdTRUE) {
-        RGB color = ring.getColor();
+    RGB color = ring.getColor();
 
-        doc["r"] = color.r;
-        doc["g"] = color.g;
-        doc["b"] = color.b;
-
-        xSemaphoreGive(ringMutex);
-    }
+    doc["r"] = color.r;
+    doc["g"] = color.g;
+    doc["b"] = color.b;
 
     serializeJson(doc, output, sizeof(output));
 
     mqtt.publish(PUB_GET_COLOR, output);
+
+    Serial.println(F("Done!"));
 }
 
 void setColorCallback(char *data, uint16_t len)
@@ -249,6 +253,8 @@ void setColorCallback(char *data, uint16_t len)
 
         xSemaphoreGive(ringMutex);
     }
+
+    Serial.println(F("Done!"));
 }
 
 // void rainbowCallback(struct pt *pt)
@@ -294,7 +300,7 @@ void mqttConnect()
         Serial.println(F("Retrying MQTT connection in 5 seconds..."));
 
         mqtt.disconnect();
-        vTaskDelay(2500 / portTICK_PERIOD_MS);  // wait 5 seconds
+        vTaskDelay(5000 / portTICK_PERIOD_MS);  // wait 5 seconds
 
         retries--;
         if (retries == 0) {
@@ -306,6 +312,7 @@ void mqttConnect()
 
     Serial.println(F("MQTT Connected!"));
     vTaskResume(processCallbacksTaskHandle);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
 }
 
 void setCallbackObject(CallbackBufferObject *callbackObj, Adafruit_MQTT_Subscribe *subscription)
