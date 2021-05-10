@@ -12,6 +12,7 @@
 
 #define NEO_PIXEL_PIN 14
 #define NEO_PIXEL_COUNT 12
+#define READ_SUBSCRIPTION_TIMEOUT 2000
 
 //==============================================================================
 // Globals
@@ -91,23 +92,24 @@ void setup()
 
     // Configure RTOS
     ringMutex = xSemaphoreCreateMutex();
-    mqttCallbackQueue = xQueueCreate(3, sizeof(CallbackBufferObject));
+    mqttCallbackQueue = xQueueCreate(2, sizeof(CallbackBufferObject));
 
     xTaskCreatePinnedToCore(
         mqttTask,        // Function to be called
         "Mqtt Task",     // Name of task
-        2048,            // Stack size (bytes in ESP32, words in FreeRTOS)
+        2560,            // Stack size (bytes in ESP32, words in FreeRTOS)
         NULL,            // Parameter to pass to function
         1,               // Task priority (0 to configMAX_PRIORITIES - 1)
         &mqttTaskHandle, // Task handle
         PRO_CPU_NUM      // Run on core
     );
+
     vTaskSuspend(mqttTaskHandle);
 
     xTaskCreatePinnedToCore(
         processCallbacksTask,        // Function to be called
         "Process Callbacks Task",    // Name of task
-        2048,                        // Stack size (bytes in ESP32, words in FreeRTOS)
+        2560,                        // Stack size (bytes in ESP32, words in FreeRTOS)
         NULL,                        // Parameter to pass to function
         1,                           // Task priority (0 to configMAX_PRIORITIES - 1)
         &processCallbacksTaskHandle, // Task handle
@@ -133,20 +135,25 @@ void loop() {}
 
 void mqttTask(void *parameter)
 {
+    uint32_t starttime, endtime, elapsed;
     Adafruit_MQTT_Subscribe *subscription;
 
     while (1) {
         mqttConnect();
 
-        while ((subscription = mqtt.readSubscription(2500))) {
-            if (subscription == &getColor || subscription == &setColor) {
+        starttime = millis();
+        endtime = 0;
+        elapsed = 0;
+
+        while (elapsed < READ_SUBSCRIPTION_TIMEOUT) {
+            if ((subscription = mqtt.readSubscription(READ_SUBSCRIPTION_TIMEOUT - elapsed))) {
                 CallbackBufferObject callbackObj;
                 setCallbackObject(&callbackObj, subscription);
 
                 if (callbackObj.callback != NULL) {
                     Serial.println(F("Sending to queue..."));
                     xQueueSend(mqttCallbackQueue, (void *)&callbackObj, 0);
-                    vTaskDelay(250 / portTICK_PERIOD_MS);
+                    vTaskDelay(500 / portTICK_PERIOD_MS);
                     break;
                 } else {
                     #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
@@ -156,6 +163,12 @@ void mqttTask(void *parameter)
                     #endif
                 }
             }
+
+            endtime = millis();
+            if (endtime < starttime) {
+                starttime = endtime;
+            }
+            elapsed += (endtime - starttime);
         }
     }
 }
@@ -169,7 +182,7 @@ void processCallbacksTask(void *parameter)
             callbackObj.callback(callbackObj.data, callbackObj.length);
         }
 
-        vTaskDelay(100 / portTICK_PERIOD_MS);
+        vTaskDelay(500 / portTICK_PERIOD_MS);
     }
 }
 
@@ -187,6 +200,7 @@ void getColorCallback(char *data, uint16_t len)
     }
 
     #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+        Serial.println("getColorCallback(): ");
         printCallbackData(data, len);
     #endif
 
@@ -218,6 +232,7 @@ void setColorCallback(char *data, uint16_t len)
     }
 
     #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+        Serial.println("setColorCallback(): ");
         printCallbackData(data, len);
     #endif
 
@@ -238,11 +253,6 @@ void setColorCallback(char *data, uint16_t len)
     color.g = doc["g"].as<uint8_t>();
     color.b = doc["b"].as<uint8_t>();
     int time = doc["time"];
-
-    #if false && defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
-        printColor(&color);
-        printTime(time);
-    #endif
 
     if (xSemaphoreTake(ringMutex, 0) == pdTRUE) {
         if (time) {
