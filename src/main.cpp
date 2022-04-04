@@ -11,7 +11,7 @@
 #include "NeoPixelRing.h"
 
 #define NEO_PIXEL_PIN 14
-#define NEO_PIXEL_COUNT 12
+#define NEO_PIXEL_COUNT 16
 #define READ_SUBSCRIPTION_TIMEOUT 2000
 
 //==============================================================================
@@ -41,17 +41,14 @@ WiFiClient client;
 Adafruit_MQTT_Client mqtt(&client, MQTT_BROKER, MQTT_PORT);
 
 // Mqtt client subscriptons
-Adafruit_MQTT_Subscribe setColor = Adafruit_MQTT_Subscribe(&mqtt, SUB_SET_COLOR);
-Adafruit_MQTT_Subscribe getColor = Adafruit_MQTT_Subscribe(&mqtt, SUB_GET_COLOR);
-//Adafruit_MQTT_Subscribe rainbow  = Adafruit_MQTT_Subscribe(&mqtt, SUB_RAINBOW);
+Adafruit_MQTT_Subscribe setColorSub = Adafruit_MQTT_Subscribe(&mqtt, SUB_SET_COLOR);
+Adafruit_MQTT_Subscribe getColorSub = Adafruit_MQTT_Subscribe(&mqtt, SUB_GET_COLOR);
 
 // Task handles
-static TaskHandle_t mqttTaskHandle = NULL;
-static TaskHandle_t processCallbacksTaskHandle = NULL;
-
+static TaskHandle_t processMqttTaskHandle = NULL;
+static TaskHandle_t processActionsTaskHandle = NULL;
 // Queues
-static QueueHandle_t mqttCallbackQueue;
-
+static QueueHandle_t actionsQueue;
 // Mutexes
 static SemaphoreHandle_t ringMutex;
 
@@ -71,60 +68,59 @@ void setup()
 
     WiFi.begin(WLAN_SSID, WLAN_PASS);
     while (WiFi.status() != WL_CONNECTED) {
-        vTaskDelay(500 / portTICK_PERIOD_MS);
+        delay(250);
         Serial.print(".");
     }
 
-    Serial.println(F(" Success!"));
+    Serial.println(F("Success!"));
     Serial.print(F("IP address: "));
     Serial.println(WiFi.localIP());
 
     // Setup Mqtt
-    mqtt.unsubscribe(&getColor);
-    mqtt.unsubscribe(&setColor);
+    mqtt.unsubscribe(&getColorSub);
+    mqtt.unsubscribe(&setColorSub);
 
-    getColor.setCallback(getColorCallback);
-    mqtt.subscribe(&getColor);
-    setColor.setCallback(setColorCallback);
-    mqtt.subscribe(&setColor);
-    //rainbow.setCallback(rainbowCallback);
-    //mqtt.subscribe(&rainbow);
+    getColorSub.setCallback(getColor);
+    mqtt.subscribe(&getColorSub);
+    setColorSub.setCallback(setColor);
+    mqtt.subscribe(&setColorSub);
 
     // Configure RTOS
+    actionsQueue = xQueueCreate(5, sizeof(SubscriptionAction_t));
     ringMutex = xSemaphoreCreateMutex();
-    mqttCallbackQueue = xQueueCreate(2, sizeof(CallbackBufferObject));
-
-    xTaskCreatePinnedToCore(
-        mqttTask,        // Function to be called
-        "Mqtt Task",     // Name of task
-        2560,            // Stack size (bytes in ESP32, words in FreeRTOS)
-        NULL,            // Parameter to pass to function
-        1,               // Task priority (0 to configMAX_PRIORITIES - 1)
-        &mqttTaskHandle, // Task handle
-        PRO_CPU_NUM      // Run on core
-    );
-
-    vTaskSuspend(mqttTaskHandle);
-
-    xTaskCreatePinnedToCore(
-        processCallbacksTask,        // Function to be called
-        "Process Callbacks Task",    // Name of task
-        2560,                        // Stack size (bytes in ESP32, words in FreeRTOS)
-        NULL,                        // Parameter to pass to function
-        1,                           // Task priority (0 to configMAX_PRIORITIES - 1)
-        &processCallbacksTaskHandle, // Task handle
-        APP_CPU_NUM                  // Run on core
-    );
 
     // Initialize neopixel ring
     if (xSemaphoreTake(ringMutex, 0) == pdTRUE) {
         ring.begin();
-
         xSemaphoreGive(ringMutex);
     }
 
-    vTaskResume(mqttTaskHandle);
-    vTaskDelete(NULL); // Removes the setup() and loop() task
+    xTaskCreatePinnedToCore(
+        processMqttTask,           // Function to be called
+        "Process Mqtt",            // Name of task
+        2560,                      // Stack size (bytes in ESP32, words in FreeRTOS)
+        NULL,                      // Parameter to pass to function
+        1,                         // Task priority (0 to configMAX_PRIORITIES - 1)
+        &processMqttTaskHandle,    // Task handle
+        PRO_CPU_NUM                // Run on core
+    );
+    vTaskSuspend(processMqttTaskHandle);
+
+    xTaskCreatePinnedToCore(
+        processActionsTask,        // Function to be called
+        "Process Handlers",        // Name of task
+        2560,                      // Stack size (bytes in ESP32, words in FreeRTOS)
+        NULL,                      // Parameter to pass to function
+        1,                         // Task priority (0 to configMAX_PRIORITIES - 1)
+        &processActionsTaskHandle, // Task handle
+        APP_CPU_NUM                // Run on core
+    );
+    vTaskSuspend(processActionsTaskHandle);
+
+    // Start the mqtt task
+    vTaskResume(processMqttTaskHandle);
+    // Remove the setup() and loop() task
+    vTaskDelete(NULL);
 }
 
 // NOTE: Loop is excuted on core #1
@@ -133,63 +129,63 @@ void loop() {}
 //==============================================================================
 // Tasks
 
-void mqttTask(void *parameter)
+void processActionsTask(void *parameter)
 {
-    uint32_t starttime, endtime, elapsed;
+    SubscriptionAction_t action;
+
+    while (1) {
+        if (xQueueReceive(actionsQueue, (void *)&action, 0) == pdTRUE) {
+            Serial.println(F("processActionsTask() executing callback..."));
+            action.callback(action.data, action.length);
+            clearAction(&action);
+        }
+    }
+}
+
+void processMqttTask(void *parameter)
+{
     Adafruit_MQTT_Subscribe *subscription;
+    SubscriptionAction action;
+    uint32_t startTime = 0;
+    uint32_t endTime = 0;
+    uint32_t elapsed = 0;
 
     while (1) {
         mqttConnect();
 
-        starttime = millis();
-        endtime = 0;
+        startTime = millis();
+        endTime = 0;
         elapsed = 0;
 
         while (elapsed < READ_SUBSCRIPTION_TIMEOUT) {
             if ((subscription = mqtt.readSubscription(READ_SUBSCRIPTION_TIMEOUT - elapsed))) {
-                CallbackBufferObject callbackObj;
-                setCallbackObject(&callbackObj, subscription);
+                setAction(&action, subscription);
 
-                if (callbackObj.callback != NULL) {
+                if (action.callback != NULL) {
                     Serial.println(F("Sending to queue..."));
-                    xQueueSend(mqttCallbackQueue, (void *)&callbackObj, 0);
-                    vTaskDelay(500 / portTICK_PERIOD_MS);
+                    xQueueSend(actionsQueue, (void *)&action, 0);
+                    vTaskDelay(250 / portTICK_PERIOD_MS);
                     break;
                 } else {
                     #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
                         Serial.println(F(""));
-                        Serial.println(F("!! Callback couldn't be set to the queue... !!"));
+                        Serial.println(F("!! Action couldn't be sent to the queue !!"));
                         Serial.println(F(""));
                     #endif
                 }
             }
 
-            endtime = millis();
-            if (endtime < starttime) {
-                starttime = endtime;
-            }
-            elapsed += (endtime - starttime);
+            endTime = millis();
+            if (endTime < startTime) startTime = endTime;
+            elapsed += (endTime - startTime);
         }
-    }
-}
-
-void processCallbacksTask(void *parameter)
-{
-    while (1) {
-        CallbackBufferObject callbackObj;
-        if (xQueueReceive(mqttCallbackQueue, (void *)&callbackObj, 0) == pdTRUE) {
-            Serial.println(F("ProcessCallbacksTask: Calling callback..."));
-            callbackObj.callback(callbackObj.data, callbackObj.length);
-        }
-
-        vTaskDelay(500 / portTICK_PERIOD_MS);
     }
 }
 
 //==============================================================================
 // Mqtt Callbacks
 
-void getColorCallback(char *data, uint16_t len)
+void getColor(char *data, uint16_t len)
 {
     if (SUBSCRIPTIONDATALEN < len) {
         #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
@@ -200,28 +196,29 @@ void getColorCallback(char *data, uint16_t len)
     }
 
     #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
-        Serial.println("getColorCallback(): ");
-        printCallbackData(data, len);
+        Serial.println("getColor(): ");
+        printSubscriptionCallbackData(data, len);
     #endif
 
     char output[SUBSCRIPTIONDATALEN];
     const int capacity = JSON_OBJECT_SIZE(3);
     StaticJsonDocument<capacity> doc;
 
-    RGB color = ring.getColor();
+    RGB_t color = ring.getColor();
 
     doc["r"] = color.r;
     doc["g"] = color.g;
     doc["b"] = color.b;
 
     serializeJson(doc, output, sizeof(output));
-
     mqtt.publish(PUB_GET_COLOR, output);
 
-    Serial.println(F("Done!"));
+    #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+        Serial.println(F("Done!"));
+    #endif
 }
 
-void setColorCallback(char *data, uint16_t len)
+void setColor(char *data, uint16_t len)
 {
     if (SUBSCRIPTIONDATALEN < len) {
         #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
@@ -232,11 +229,10 @@ void setColorCallback(char *data, uint16_t len)
     }
 
     #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
-        Serial.println("setColorCallback(): ");
-        printCallbackData(data, len);
+        Serial.println("setColor(): ");
+        printSubscriptionCallbackData(data, len);
     #endif
 
-    RGB color = {0,0,0};
     const int capacity = JSON_OBJECT_SIZE(4);
     StaticJsonDocument<capacity> doc;
     DeserializationError error = deserializeJson(doc, data);
@@ -249,50 +245,27 @@ void setColorCallback(char *data, uint16_t len)
         return;
     }
 
-    color.r = doc["r"].as<uint8_t>();
-    color.g = doc["g"].as<uint8_t>();
-    color.b = doc["b"].as<uint8_t>();
-    int time = doc["time"];
+    uint8_t r = doc["r"].as<uint8_t>();
+    uint8_t g = doc["g"].as<uint8_t>();
+    uint8_t b = doc["b"].as<uint8_t>();
+    int time = doc["time"].as<int>();
 
     if (xSemaphoreTake(ringMutex, 0) == pdTRUE) {
         if (time) {
-            ring.fadeColor(&color, time);
+            ring.fadeColor(r, g, b, time);
         } else {
-            ring.setColor(&color);
+            ring.setColor(r, g, b);
         }
-
         xSemaphoreGive(ringMutex);
     }
 
-    Serial.println(F("Done!"));
+    #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+        Serial.println(F("Done!"));
+    #endif
 }
-
-// void rainbowCallback(struct pt *pt)
-// {
-//     while (true) {
-//         Serial.println("processRanbow loop()");
-//         ring.fadeColor(255, 0, 0, 550);   // red
-//         ring.fadeColor(255, 255, 0, 550); // yellow
-//         ring.fadeColor(0, 255, 0, 550);   // green
-//         ring.fadeColor(0, 255, 255, 550); // cyan
-//         ring.fadeColor(0, 0, 255, 550);   // blue
-//         ring.fadeColor(255, 0, 255, 550); // magenta
-//     }
-// }
 
 //==============================================================================
 // Methods
-
-void clearCallbackData(CallbackBufferObject *callbackObj)
-{
-    memset(callbackObj->data, '\0', SUBSCRIPTIONDATALEN);
-}
-
-void copyCallbackData(CallbackBufferObject *callbackObj, char *data)
-{
-    clearCallbackData(callbackObj);
-    strncpy(callbackObj->data, data, (SUBSCRIPTIONDATALEN - 1));
-}
 
 void mqttConnect()
 {
@@ -300,12 +273,14 @@ void mqttConnect()
         return;
     }
 
-    vTaskSuspend(processCallbacksTaskHandle);
-    Serial.print(F("Connecting to MQTT... "));
+    Serial.print(F("Connecting to MQTT..."));
+    vTaskSuspend(processActionsTaskHandle);
 
-    int8_t ret;
+    uint8_t ret;
     uint8_t retries = 3;
     while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
+        Serial.println(F(""));
+        Serial.print(F("Mqtt connection error: "));
         Serial.println(mqtt.connectErrorString(ret));
         Serial.println(F("Retrying MQTT connection in 5 seconds..."));
 
@@ -315,26 +290,31 @@ void mqttConnect()
         retries--;
         if (retries == 0) {
             Serial.println(F("Could not connetect to the mqtt broker. Ran out of retries..."));
-            // basically die and wait for WDT to reset me
-            while (1);
+            while (1); // die and wait for reset
         }
     }
 
-    Serial.println(F("MQTT Connected!"));
-    vTaskResume(processCallbacksTaskHandle);
-    vTaskDelay(100 / portTICK_PERIOD_MS);
+    Serial.println(F("Success!"));
+    vTaskResume(processActionsTaskHandle);
+    vTaskDelay(250 / portTICK_PERIOD_MS);
 }
 
-void setCallbackObject(CallbackBufferObject *callbackObj, Adafruit_MQTT_Subscribe *subscription)
+void clearAction(SubscriptionAction_t *action)
+{
+    action->callback = NULL;
+    memset(action->data, '\0', SUBSCRIPTIONDATALEN);
+    action->length = 0;
+}
+
+void setAction(SubscriptionAction_t *action, Adafruit_MQTT_Subscribe *subscription)
 {
     if (subscription->callback_buffer) {
-        callbackObj->callback = subscription->callback_buffer;
-        copyCallbackData(callbackObj, (char *)subscription->lastread);
-        callbackObj->length = subscription->datalen;
+        action->callback = subscription->callback_buffer;
+        memset(action->data, '\0', SUBSCRIPTIONDATALEN);
+        strncpy(action->data, (char *)subscription->lastread, (SUBSCRIPTIONDATALEN - 1));
+        action->length = subscription->datalen;
     } else {
-        callbackObj->callback = NULL;
-        clearCallbackData(callbackObj);
-        callbackObj->length = 0;
+        clearAction(action);
     }
 }
 
@@ -342,7 +322,7 @@ void setCallbackObject(CallbackBufferObject *callbackObj, Adafruit_MQTT_Subscrib
 // Debug Helpers
 
 #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
-    void printCallbackData(char *data, uint16_t len)
+    void printSubscriptionCallbackData(char *data, uint16_t len)
     {
         Serial.print(F("Data: "));
         Serial.println(data);
@@ -350,25 +330,9 @@ void setCallbackObject(CallbackBufferObject *callbackObj, Adafruit_MQTT_Subscrib
         Serial.println(len);
     }
 
-    void printColor(RGB *color)
-    {
-        Serial.print(F("r: "));
-        Serial.println(color->r);
-        Serial.print(F("g: "));
-        Serial.println(color->g);
-        Serial.print(F("b: "));
-        Serial.println(color->b);
-    }
-
-    void printTime(int time)
-    {
-        Serial.print(F("time: "));
-        Serial.println(time);
-    }
-
     void printDeserializeError(DeserializationError *error)
     {
-        Serial.print(F("Deserialization error: "));
+        Serial.print(F("Arduino Json eserialization error: "));
         Serial.println(error->c_str());
     }
 #endif

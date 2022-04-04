@@ -29,8 +29,8 @@ void NeoPixelRing::begin()
 
 void NeoPixelRing::fadeColor(uint8_t r, uint8_t g, uint8_t b, int fadeTime)
 {
-    RGB color = {0, 0, 0};
-    RGB startColor = this->getColor();
+    RGB_t color = {0, 0, 0};
+    RGB_t startColor = this->getColor();
 
     for (int i = 0; i < fadeTime; i++) {
         color.r = map(i, 0, fadeTime, startColor.r, r);
@@ -45,12 +45,12 @@ void NeoPixelRing::fadeColor(uint8_t r, uint8_t g, uint8_t b, int fadeTime)
     vTaskDelay(5);
 }
 
-void NeoPixelRing::fadeColor(RGB *endColor, int fadeTime)
+void NeoPixelRing::fadeColor(RGB_t *endColor, int fadeTime)
 {
     fadeColor(endColor->r, endColor->g, endColor->b, fadeTime);
 }
 
-RGB NeoPixelRing::getColor(void)
+RGB_t NeoPixelRing::getColor(void)
 {
     // TODO: Whatever color the greatest number of pixel is, return that.
     return unpackColor(neoPixel->getPixelColor(0));
@@ -71,7 +71,7 @@ void NeoPixelRing::setColor(uint8_t r, uint8_t g, uint8_t b)
     neoPixel->show();
 }
 
-void NeoPixelRing::setColor(RGB *color)
+void NeoPixelRing::setColor(RGB_t *color)
 {
     uint16_t i;
     for (i = 0; i < neoPixel->numPixels(); i++) {
@@ -110,9 +110,9 @@ void NeoPixelRing::rainbowCycle(uint8_t wait)
 }
 
 // TODO make sure this uses dynamic memeory
-RGB NeoPixelRing::unpackColor(uint32_t color)
+RGB_t NeoPixelRing::unpackColor(uint32_t color)
 {
-    RGB unpackedColor;
+    RGB_t unpackedColor;
     unpackedColor.r = (uint8_t)(color >> 16);
     unpackedColor.g = (uint8_t)(color >> 8);
     unpackedColor.b = (uint8_t)(color);
@@ -147,7 +147,7 @@ void NeoPixelRing::wipeColor(uint8_t r, uint8_t g, uint8_t b)
     }
 }
 
-void NeoPixelRing::wipeColor(RGB *color)
+void NeoPixelRing::wipeColor(RGB_t *color)
 {
     uint16_t i;
     for (i = 0; i < neoPixel->numPixels(); i++) {
