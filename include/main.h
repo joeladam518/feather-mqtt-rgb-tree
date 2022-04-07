@@ -27,7 +27,8 @@ void getTwinkleLights(char *data, uint16_t len);
 void setTwinkleLights(char *data, uint16_t len);
 
 // Tasks
-void processActionsTask(void *parameter);
+void processShortActionsTask(void *parameter);
+void processLongActionsTask(void *parameter);
 void processInputTask(void *parameter);
 
 // Methods

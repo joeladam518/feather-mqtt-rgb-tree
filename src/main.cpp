@@ -43,11 +43,13 @@ Adafruit_MQTT_Subscribe getTwinkleLightsSub = Adafruit_MQTT_Subscribe(&mqtt, SUB
 Adafruit_MQTT_Subscribe setTwinkleLightsSub = Adafruit_MQTT_Subscribe(&mqtt, SUB_SET_TW_LIGHTS);
 
 // Task handles
-static TaskHandle_t processActionsTaskHandle = NULL;
+static TaskHandle_t processShortActionsTaskHandle = NULL;
+static TaskHandle_t processLongActionsTaskHandle = NULL;
 static TaskHandle_t processInputTaskHandle = NULL;
 
 // Queues
-static QueueHandle_t actionsQueue = NULL;
+static QueueHandle_t shortActionsQueue = NULL;
+static QueueHandle_t longActionsQueue = NULL;
 
 // Mutexes
 static SemaphoreHandle_t ringMutex;
@@ -100,7 +102,8 @@ void setup()
     mqtt.subscribe(&setTwinkleLightsSub);
 
     // Configure RTOS
-    actionsQueue = xQueueCreate(10, sizeof(SubscriptionAction_t));
+    shortActionsQueue = xQueueCreate(3, sizeof(SubscriptionAction_t));
+    longActionsQueue = xQueueCreate(5, sizeof(SubscriptionAction_t));
     ringMutex = xSemaphoreCreateMutex();
 
     // Initialize neopixel ring
@@ -111,8 +114,8 @@ void setup()
 
     xTaskCreatePinnedToCore(
         processInputTask,           // Function to be called
-        "Process Mqtt",            // Name of task
-        2560,                      // Stack size (bytes in ESP32, words in FreeRTOS)
+        "Process Mqtt Input",            // Name of task
+        1750,                      // Stack size (bytes in ESP32, words in FreeRTOS)
         NULL,                      // Parameter to pass to function
         1,                         // Task priority (0 to configMAX_PRIORITIES - 1)
         &processInputTaskHandle,    // Task handle
@@ -121,15 +124,26 @@ void setup()
     vTaskSuspend(processInputTaskHandle);
 
     xTaskCreatePinnedToCore(
-        processActionsTask,   // Function to be called
-        "Process Actions",   // Name of task
-        2560,                      // Stack size (bytes in ESP32, words in FreeRTOS)
+        processShortActionsTask,        // Function to be called
+        "Process Long Actions",         // Name of task
+        2048,                      // Stack size (bytes in ESP32, words in FreeRTOS)
         NULL,                      // Parameter to pass to function
         2,                         // Task priority (0 to configMAX_PRIORITIES - 1)
-        &processActionsTaskHandle, // Task handle
+        &processShortActionsTaskHandle, // Task handle
         APP_CPU_NUM                // Run on core
     );
-    vTaskSuspend(processActionsTaskHandle);
+    vTaskSuspend(processShortActionsTaskHandle);
+
+    xTaskCreatePinnedToCore(
+        processLongActionsTask,        // Function to be called
+        "Process Short Actions",         // Name of task
+        2048,                      // Stack size (bytes in ESP32, words in FreeRTOS)
+        NULL,                      // Parameter to pass to function
+        1,                         // Task priority (0 to configMAX_PRIORITIES - 1)
+        &processLongActionsTaskHandle, // Task handle
+        APP_CPU_NUM                // Run on core
+    );
+    vTaskSuspend(processLongActionsTaskHandle);
 
     // Start the mqtt task
     vTaskResume(processInputTaskHandle);
@@ -143,13 +157,28 @@ void loop() {}
 //==============================================================================
 // Tasks
 
-void processActionsTask(void *parameter)
+void processShortActionsTask(void *parameter)
 {
     SubscriptionAction_t action;
 
     while (1) {
-        if (xQueueReceive(actionsQueue, (void *)&action, 0) == pdTRUE) {
-            Serial.println(F("processActionsTask() executing callback..."));
+        if (xQueueReceive(shortActionsQueue, (void *)&action, 0) == pdTRUE) {
+            Serial.println(F("processShortActionsTask() executing callback..."));
+            action.callback(action.data, action.length);
+            clearAction(&action);
+        }
+
+        vTaskDelay(250 / portTICK_PERIOD_MS);
+    }
+}
+
+void processLongActionsTask(void *parameter)
+{
+    SubscriptionAction_t action;
+
+    while (1) {
+        if (xQueueReceive(longActionsQueue, (void *)&action, 0) == pdTRUE) {
+            Serial.println(F("processLongActionsTask() executing callback..."));
             action.callback(action.data, action.length);
             clearAction(&action);
         }
@@ -158,6 +187,9 @@ void processActionsTask(void *parameter)
 
 void processInputTask(void *parameter)
 {
+    Serial.println(F("HELLO"));
+
+
     Adafruit_MQTT_Subscribe *subscription;
     SubscriptionAction action;
     uint32_t startTime = 0;
@@ -174,9 +206,11 @@ void processInputTask(void *parameter)
             if ((subscription = mqtt.readSubscription(READ_SUBSCRIPTION_TIMEOUT - elapsed))) {
                 setAction(&action, subscription);
 
-                if (subscription == &setTwinkleLightsSub) {
+                if (subscription == &getColorSub || subscription == &getTwinkleLightsSub  || subscription == &setTwinkleLightsSub) {
                     if (action.callback != NULL) {
-                        action.callback(action.data, action.length);
+                        Serial.println(F("Sending to short actions queue..."));
+                        xQueueSend(shortActionsQueue, (void *)&action, 0);
+                        vTaskDelay(250 / portTICK_PERIOD_MS);
                     } else {
                         #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
                             Serial.println(F(""));
@@ -188,10 +222,10 @@ void processInputTask(void *parameter)
                     break;
                 }
 
-                if (subscription == &getColorSub || subscription == &getTwinkleLightsSub || subscription == &setColorSub) {
+                if (subscription == &setColorSub) {
                     if (action.callback != NULL) {
-                        Serial.println(F("Sending to queue..."));
-                        xQueueSend(actionsQueue, (void *)&action, 0);
+                        Serial.println(F("Sending to long actions queue..."));
+                        xQueueSend(longActionsQueue, (void *)&action, 0);
                         vTaskDelay(250 / portTICK_PERIOD_MS);
                     } else {
                         #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
@@ -374,7 +408,8 @@ void mqttConnect()
     }
 
     Serial.print(F("Connecting to MQTT..."));
-    vTaskSuspend(processActionsTaskHandle);
+    vTaskSuspend(processShortActionsTaskHandle);
+    vTaskSuspend(processLongActionsTaskHandle);
 
     uint8_t ret;
     uint8_t retries = 3;
@@ -395,7 +430,8 @@ void mqttConnect()
     }
 
     Serial.println(F("Success!"));
-    vTaskResume(processActionsTaskHandle);
+    vTaskResume(processShortActionsTaskHandle);
+    vTaskResume(processLongActionsTaskHandle);
     vTaskDelay(250 / portTICK_PERIOD_MS);
 }
 
