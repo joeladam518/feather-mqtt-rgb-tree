@@ -10,10 +10,6 @@
 #include "led.h"
 #include "NeoPixelRing.h"
 
-#define NEO_PIXEL_PIN 14
-#define NEO_PIXEL_COUNT 16
-#define READ_SUBSCRIPTION_TIMEOUT 2000
-
 //==============================================================================
 // Globals
 
@@ -41,14 +37,18 @@ WiFiClient client;
 Adafruit_MQTT_Client mqtt(&client, MQTT_BROKER, MQTT_PORT);
 
 // Mqtt client subscriptons
-Adafruit_MQTT_Subscribe setColorSub = Adafruit_MQTT_Subscribe(&mqtt, SUB_SET_COLOR);
 Adafruit_MQTT_Subscribe getColorSub = Adafruit_MQTT_Subscribe(&mqtt, SUB_GET_COLOR);
+Adafruit_MQTT_Subscribe setColorSub = Adafruit_MQTT_Subscribe(&mqtt, SUB_SET_COLOR);
+Adafruit_MQTT_Subscribe getTwinkleLightsSub = Adafruit_MQTT_Subscribe(&mqtt, SUB_GET_TW_LIGHTS);
+Adafruit_MQTT_Subscribe setTwinkleLightsSub = Adafruit_MQTT_Subscribe(&mqtt, SUB_SET_TW_LIGHTS);
 
 // Task handles
-static TaskHandle_t processMqttTaskHandle = NULL;
 static TaskHandle_t processActionsTaskHandle = NULL;
+static TaskHandle_t processInputTaskHandle = NULL;
+
 // Queues
-static QueueHandle_t actionsQueue;
+static QueueHandle_t actionsQueue = NULL;
+
 // Mutexes
 static SemaphoreHandle_t ringMutex;
 
@@ -76,17 +76,31 @@ void setup()
     Serial.print(F("IP address: "));
     Serial.println(WiFi.localIP());
 
+    // Set the default values for the twinkle lights
+    pinMode(TW1_PIN, OUTPUT);
+    digitalWrite(TW1_PIN, LOW);
+    pinMode(TW2_PIN, OUTPUT);
+    digitalWrite(TW2_PIN, LOW);
+    pinMode(TW3_PIN, OUTPUT);
+    digitalWrite(TW3_PIN, LOW);
+
     // Setup Mqtt
     mqtt.unsubscribe(&getColorSub);
     mqtt.unsubscribe(&setColorSub);
+    mqtt.unsubscribe(&getTwinkleLightsSub);
+    mqtt.unsubscribe(&setTwinkleLightsSub);
 
     getColorSub.setCallback(getColor);
     mqtt.subscribe(&getColorSub);
     setColorSub.setCallback(setColor);
     mqtt.subscribe(&setColorSub);
+    getTwinkleLightsSub.setCallback(getTwinkleLights);
+    mqtt.subscribe(&getTwinkleLightsSub);
+    setTwinkleLightsSub.setCallback(setTwinkleLights);
+    mqtt.subscribe(&setTwinkleLightsSub);
 
     // Configure RTOS
-    actionsQueue = xQueueCreate(5, sizeof(SubscriptionAction_t));
+    actionsQueue = xQueueCreate(10, sizeof(SubscriptionAction_t));
     ringMutex = xSemaphoreCreateMutex();
 
     // Initialize neopixel ring
@@ -96,29 +110,29 @@ void setup()
     }
 
     xTaskCreatePinnedToCore(
-        processMqttTask,           // Function to be called
+        processInputTask,           // Function to be called
         "Process Mqtt",            // Name of task
         2560,                      // Stack size (bytes in ESP32, words in FreeRTOS)
         NULL,                      // Parameter to pass to function
         1,                         // Task priority (0 to configMAX_PRIORITIES - 1)
-        &processMqttTaskHandle,    // Task handle
+        &processInputTaskHandle,    // Task handle
         PRO_CPU_NUM                // Run on core
     );
-    vTaskSuspend(processMqttTaskHandle);
+    vTaskSuspend(processInputTaskHandle);
 
     xTaskCreatePinnedToCore(
-        processActionsTask,        // Function to be called
-        "Process Handlers",        // Name of task
+        processActionsTask,   // Function to be called
+        "Process Actions",   // Name of task
         2560,                      // Stack size (bytes in ESP32, words in FreeRTOS)
         NULL,                      // Parameter to pass to function
-        1,                         // Task priority (0 to configMAX_PRIORITIES - 1)
+        2,                         // Task priority (0 to configMAX_PRIORITIES - 1)
         &processActionsTaskHandle, // Task handle
         APP_CPU_NUM                // Run on core
     );
     vTaskSuspend(processActionsTaskHandle);
 
     // Start the mqtt task
-    vTaskResume(processMqttTaskHandle);
+    vTaskResume(processInputTaskHandle);
     // Remove the setup() and loop() task
     vTaskDelete(NULL);
 }
@@ -142,7 +156,7 @@ void processActionsTask(void *parameter)
     }
 }
 
-void processMqttTask(void *parameter)
+void processInputTask(void *parameter)
 {
     Adafruit_MQTT_Subscribe *subscription;
     SubscriptionAction action;
@@ -153,25 +167,41 @@ void processMqttTask(void *parameter)
     while (1) {
         mqttConnect();
 
-        startTime = millis();
-        endTime = 0;
         elapsed = 0;
-
+        endTime = 0;
+        startTime = millis();
         while (elapsed < READ_SUBSCRIPTION_TIMEOUT) {
             if ((subscription = mqtt.readSubscription(READ_SUBSCRIPTION_TIMEOUT - elapsed))) {
                 setAction(&action, subscription);
 
-                if (action.callback != NULL) {
-                    Serial.println(F("Sending to queue..."));
-                    xQueueSend(actionsQueue, (void *)&action, 0);
-                    vTaskDelay(250 / portTICK_PERIOD_MS);
+                if (subscription == &setTwinkleLightsSub) {
+                    if (action.callback != NULL) {
+                        action.callback(action.data, action.length);
+                    } else {
+                        #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+                            Serial.println(F(""));
+                            Serial.println(F("!! Action couldn't be processed !!"));
+                            Serial.println(F(""));
+                        #endif
+                    }
+
                     break;
-                } else {
-                    #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
-                        Serial.println(F(""));
-                        Serial.println(F("!! Action couldn't be sent to the queue !!"));
-                        Serial.println(F(""));
-                    #endif
+                }
+
+                if (subscription == &getColorSub || subscription == &getTwinkleLightsSub || subscription == &setColorSub) {
+                    if (action.callback != NULL) {
+                        Serial.println(F("Sending to queue..."));
+                        xQueueSend(actionsQueue, (void *)&action, 0);
+                        vTaskDelay(250 / portTICK_PERIOD_MS);
+                    } else {
+                        #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+                            Serial.println(F(""));
+                            Serial.println(F("!! Action couldn't be sent to the queue !!"));
+                            Serial.println(F(""));
+                        #endif
+                    }
+
+                    break;
                 }
             }
 
@@ -200,18 +230,7 @@ void getColor(char *data, uint16_t len)
         printSubscriptionCallbackData(data, len);
     #endif
 
-    char output[SUBSCRIPTIONDATALEN];
-    const int capacity = JSON_OBJECT_SIZE(3);
-    StaticJsonDocument<capacity> doc;
-
-    RGB_t color = ring.getColor();
-
-    doc["r"] = color.r;
-    doc["g"] = color.g;
-    doc["b"] = color.b;
-
-    serializeJson(doc, output, sizeof(output));
-    mqtt.publish(PUB_GET_COLOR, output);
+    publishRgbStatus();
 
     #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
         Serial.println(F("Done!"));
@@ -248,7 +267,7 @@ void setColor(char *data, uint16_t len)
     uint8_t r = doc["r"].as<uint8_t>();
     uint8_t g = doc["g"].as<uint8_t>();
     uint8_t b = doc["b"].as<uint8_t>();
-    int time = doc["time"].as<int>();
+    uint16_t time = doc["time"].as<uint16_t>();
 
     if (xSemaphoreTake(ringMutex, 0) == pdTRUE) {
         if (time) {
@@ -262,6 +281,87 @@ void setColor(char *data, uint16_t len)
     #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
         Serial.println(F("Done!"));
     #endif
+}
+
+void getTwinkleLights(char *data, uint16_t len)
+{
+    if (SUBSCRIPTIONDATALEN < len) {
+        #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+            Serial.println(F("data is larger than max legnth. Can not parse."));
+        #endif
+
+        return;
+    }
+
+    #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+        Serial.println("getTwinkleLights(): ");
+        printSubscriptionCallbackData(data, len);
+    #endif
+
+    publishTwinkleLightStatus();
+
+    #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+        Serial.println(F("Done!"));
+    #endif
+}
+
+void setTwinkleLights(char *data, uint16_t len)
+{
+    if (SUBSCRIPTIONDATALEN < len) {
+        #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+            Serial.println(F("data is larger than max legnth. Can not parse."));
+        #endif
+
+        return;
+    }
+
+    #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+        Serial.println("setTwinkleLights(): ");
+        printSubscriptionCallbackData(data, len);
+    #endif
+
+    const int capacity = JSON_OBJECT_SIZE(3);
+    StaticJsonDocument<capacity> doc;
+    DeserializationError error = deserializeJson(doc, data);
+
+    if (error) {
+        #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+            printDeserializeError(&error);
+        #endif
+
+        return;
+    }
+
+
+    if (doc.containsKey("tw1")) {
+        uint8_t tw1 = doc["tw1"].as<uint8_t>();
+
+        if (tw1 > 0) {
+            digitalWrite(TW1_PIN, HIGH);
+        } else {
+            digitalWrite(TW1_PIN, LOW);
+        }
+    }
+
+    if (doc.containsKey("tw2")) {
+        uint8_t tw2 = doc["tw2"].as<uint8_t>();
+
+        if (tw2 > 0) {
+            digitalWrite(TW2_PIN, HIGH);
+        } else {
+            digitalWrite(TW2_PIN, LOW);
+        }
+    }
+
+    if (doc.containsKey("tw3")) {
+        uint8_t tw3 = doc["tw3"].as<uint8_t>();
+
+        if (tw3 > 0) {
+            digitalWrite(TW3_PIN, HIGH);
+        } else {
+            digitalWrite(TW3_PIN, LOW);
+        }
+    }
 }
 
 //==============================================================================
@@ -308,14 +408,44 @@ void clearAction(SubscriptionAction_t *action)
 
 void setAction(SubscriptionAction_t *action, Adafruit_MQTT_Subscribe *subscription)
 {
-    if (subscription->callback_buffer) {
+    clearAction(action);
+
+    if (subscription != NULL && subscription->callback_buffer != NULL) {
         action->callback = subscription->callback_buffer;
-        memset(action->data, '\0', SUBSCRIPTIONDATALEN);
         strncpy(action->data, (char *)subscription->lastread, (SUBSCRIPTIONDATALEN - 1));
         action->length = subscription->datalen;
-    } else {
-        clearAction(action);
     }
+}
+
+void publishRgbStatus(void)
+{
+    char output[SUBSCRIPTIONDATALEN];
+    const int capacity = JSON_OBJECT_SIZE(3);
+    StaticJsonDocument<capacity> doc;
+
+    RGB_t color = {0, 0, 0};
+    ring.getColor(&color);
+
+    doc["r"] = color.r;
+    doc["g"] = color.g;
+    doc["b"] = color.b;
+
+    serializeJson(doc, output, sizeof(output));
+    mqtt.publish(PUB_GET_COLOR, output);
+}
+
+void publishTwinkleLightStatus(void)
+{
+    char output[SUBSCRIPTIONDATALEN];
+    const int capacity = JSON_OBJECT_SIZE(3);
+    StaticJsonDocument<capacity> doc;
+
+    doc["tw1"] = digitalRead(TW1_PIN);
+    doc["tw2"] = digitalRead(TW2_PIN);
+    doc["tw3"] = digitalRead(TW3_PIN);
+
+    serializeJson(doc, output, sizeof(output));
+    mqtt.publish(PUB_GET_TW_LIGHTS, output);
 }
 
 //==============================================================================

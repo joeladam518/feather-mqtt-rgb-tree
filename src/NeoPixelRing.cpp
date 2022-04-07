@@ -21,39 +21,44 @@ NeoPixelRing::NeoPixelRing(Adafruit_NeoPixel *neoPixel):
 //-------------------------------
 // methods
 //-------------------------------
-void NeoPixelRing::begin()
+void NeoPixelRing::begin(void)
 {
     neoPixel->begin();
     off();
 }
 
-void NeoPixelRing::fadeColor(uint8_t r, uint8_t g, uint8_t b, int fadeTime)
+void NeoPixelRing::fadeColor(uint8_t r, uint8_t g, uint8_t b, uint16_t fadeTime)
 {
-    RGB_t color = {0, 0, 0};
-    RGB_t startColor = this->getColor();
+    RGB_t startColor = {0, 0, 0};
+    getColor(&startColor);
 
+    RGB_t color = {0, 0, 0};
     for (int i = 0; i < fadeTime; i++) {
         color.r = map(i, 0, fadeTime, startColor.r, r);
         color.g = map(i, 0, fadeTime, startColor.g, g);
         color.b = map(i, 0, fadeTime, startColor.b, b);
 
         setColor(&color);
-        vTaskDelay(5);
+        vTaskDelay((portTickType) 10);
     }
 
     setColor(r, g, b);
-    vTaskDelay(5);
+    vTaskDelay((portTickType) 10);
 }
 
-void NeoPixelRing::fadeColor(RGB_t *endColor, int fadeTime)
+void NeoPixelRing::fadeColor(RGB_t *endColor, uint16_t fadeTime)
 {
     fadeColor(endColor->r, endColor->g, endColor->b, fadeTime);
 }
 
-RGB_t NeoPixelRing::getColor(void)
+void NeoPixelRing::getColor(RGB_t *color)
 {
     // TODO: Whatever color the greatest number of pixel is, return that.
-    return unpackColor(neoPixel->getPixelColor(0));
+    uint32_t currentColor = neoPixel->getPixelColor(0);
+
+    color->r = (uint8_t)(currentColor >> 16);
+    color->g = (uint8_t)(currentColor >> 8);
+    color->b = (uint8_t)(currentColor);
 }
 
 void NeoPixelRing::off(void)
@@ -90,7 +95,7 @@ void NeoPixelRing::rainbow(uint8_t wait)
         }
 
         neoPixel->show();
-        vTaskDelay(wait);
+        vTaskDelay((portTickType) wait);
     }
 }
 
@@ -105,19 +110,8 @@ void NeoPixelRing::rainbowCycle(uint8_t wait)
         }
 
         neoPixel->show();
-        vTaskDelay(wait);
+        vTaskDelay((portTickType) wait);
     }
-}
-
-// TODO make sure this uses dynamic memeory
-RGB_t NeoPixelRing::unpackColor(uint32_t color)
-{
-    RGB_t unpackedColor;
-    unpackedColor.r = (uint8_t)(color >> 16);
-    unpackedColor.g = (uint8_t)(color >> 8);
-    unpackedColor.b = (uint8_t)(color);
-
-    return unpackedColor;
 }
 
 uint32_t NeoPixelRing::wheel(uint8_t wheelPos)
@@ -143,7 +137,7 @@ void NeoPixelRing::wipeColor(uint8_t r, uint8_t g, uint8_t b)
     for (i = 0; i < neoPixel->numPixels(); i++) {
         neoPixel->setPixelColor(i, r, g, b);
         neoPixel->show();
-        vTaskDelay(5);
+        vTaskDelay((portTickType) 10);
     }
 }
 
@@ -153,6 +147,6 @@ void NeoPixelRing::wipeColor(RGB_t *color)
     for (i = 0; i < neoPixel->numPixels(); i++) {
         neoPixel->setPixelColor(i, color->r, color->g, color->b);
         neoPixel->show();
-        vTaskDelay(5);
+        vTaskDelay((portTickType) 10);
     }
 }
