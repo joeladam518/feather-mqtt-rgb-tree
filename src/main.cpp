@@ -163,7 +163,9 @@ void processShortActionsTask(void *parameter)
 
     while (1) {
         if (xQueueReceive(shortActionsQueue, (void *)&action, 0) == pdTRUE) {
-            Serial.println(F("processShortActionsTask() executing callback..."));
+            #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+                Serial.println(F("processShortActionsTask() executing callback..."));
+            #endif
             action.callback(action.data, action.length);
             clearAction(&action);
         }
@@ -178,7 +180,9 @@ void processLongActionsTask(void *parameter)
 
     while (1) {
         if (xQueueReceive(longActionsQueue, (void *)&action, 0) == pdTRUE) {
-            Serial.println(F("processLongActionsTask() executing callback..."));
+            #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+                Serial.println(F("processLongActionsTask() executing callback..."));
+            #endif
             action.callback(action.data, action.length);
             clearAction(&action);
         }
@@ -187,9 +191,6 @@ void processLongActionsTask(void *parameter)
 
 void processInputTask(void *parameter)
 {
-    Serial.println(F("HELLO"));
-
-
     Adafruit_MQTT_Subscribe *subscription;
     SubscriptionAction action;
     uint32_t startTime = 0;
@@ -208,7 +209,9 @@ void processInputTask(void *parameter)
 
                 if (subscription == &getColorSub || subscription == &getTwinkleLightsSub  || subscription == &setTwinkleLightsSub) {
                     if (action.callback != NULL) {
-                        Serial.println(F("Sending to short actions queue..."));
+                        #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+                            Serial.println(F("Sending to short actions queue..."));
+                        #endif
                         xQueueSend(shortActionsQueue, (void *)&action, 0);
                         vTaskDelay(250 / portTICK_PERIOD_MS);
                     } else {
@@ -224,7 +227,9 @@ void processInputTask(void *parameter)
 
                 if (subscription == &setColorSub) {
                     if (action.callback != NULL) {
-                        Serial.println(F("Sending to long actions queue..."));
+                        #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+                            Serial.println(F("Sending to long actions queue..."));
+                        #endif
                         xQueueSend(longActionsQueue, (void *)&action, 0);
                         vTaskDelay(250 / portTICK_PERIOD_MS);
                     } else {
