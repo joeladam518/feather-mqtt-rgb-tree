@@ -186,6 +186,8 @@ void processLongActionsTask(void *parameter)
             action.callback(action.data, action.length);
             clearAction(&action);
         }
+
+        vTaskDelay(50 / portTICK_PERIOD_MS);
     }
 }
 
