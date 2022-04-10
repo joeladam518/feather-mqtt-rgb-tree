@@ -322,6 +322,8 @@ void setColor(char *data, uint16_t len)
     #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
         Serial.println(F("Done!"));
     #endif
+
+    publishRgbStatus();
 }
 
 void getTwinkleLights(char *data, uint16_t len)
@@ -403,6 +405,8 @@ void setTwinkleLights(char *data, uint16_t len)
             digitalWrite(TW3_PIN, LOW);
         }
     }
+
+    publishTwinkleLightStatus();
 }
 
 //==============================================================================
