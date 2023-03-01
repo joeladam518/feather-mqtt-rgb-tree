@@ -1,8 +1,9 @@
 #include "config.h"
 // Library Headers
 #include <WiFi.h> // ESP32 Wifi client library
-#include <Adafruit_MQTT.h>
-#include <Adafruit_MQTT_Client.h>
+#include <mqtt_client.h>
+//#include <Adafruit_MQTT.h>
+// #include <Adafruit_MQTT_Client.h>
 #include <Adafruit_NeoPixel.h>
 #include <ArduinoJson.h>
 // Custom Headers
@@ -31,28 +32,25 @@ Adafruit_NeoPixel neoPixel(NEO_PIXEL_COUNT, NEO_PIXEL_PIN, NEO_GRB + NEO_KHZ800)
 NeoPixelRing ring(&neoPixel);
 
 // Wifi client
-WiFiClient client;
+WiFiClient wifiClient;
 
 // Mqtt client
-Adafruit_MQTT_Client mqtt(&client, MQTT_BROKER, MQTT_PORT);
-
-// Mqtt client subscriptons
-Adafruit_MQTT_Subscribe getColorSub = Adafruit_MQTT_Subscribe(&mqtt, SUB_GET_COLOR);
-Adafruit_MQTT_Subscribe setColorSub = Adafruit_MQTT_Subscribe(&mqtt, SUB_SET_COLOR);
-Adafruit_MQTT_Subscribe getTwinkleLightsSub = Adafruit_MQTT_Subscribe(&mqtt, SUB_GET_TW_LIGHTS);
-Adafruit_MQTT_Subscribe setTwinkleLightsSub = Adafruit_MQTT_Subscribe(&mqtt, SUB_SET_TW_LIGHTS);
+esp_mqtt_client_config_t mqtt_cfg = {
+    .host = MQTT_BROKER,
+    .port = MQTT_PORT,
+};
 
 // Task handles
-static TaskHandle_t processShortActionsTaskHandle = NULL;
-static TaskHandle_t processLongActionsTaskHandle = NULL;
-static TaskHandle_t processInputTaskHandle = NULL;
+TaskHandle_t processShortActionsTaskHandle = NULL;
+TaskHandle_t processLongActionsTaskHandle = NULL;
+TaskHandle_t processInputTaskHandle = NULL;
 
 // Queues
-static QueueHandle_t shortActionsQueue = NULL;
-static QueueHandle_t longActionsQueue = NULL;
+QueueHandle_t shortActionsQueue = NULL;
+QueueHandle_t longActionsQueue = NULL;
 
 // Mutexes
-static SemaphoreHandle_t ringMutex;
+SemaphoreHandle_t ringMutex;
 
 //==============================================================================
 // Main
@@ -85,21 +83,6 @@ void setup()
     digitalWrite(TW2_PIN, LOW);
     pinMode(TW3_PIN, OUTPUT);
     digitalWrite(TW3_PIN, LOW);
-
-    // Setup Mqtt
-    mqtt.unsubscribe(&getColorSub);
-    mqtt.unsubscribe(&setColorSub);
-    mqtt.unsubscribe(&getTwinkleLightsSub);
-    mqtt.unsubscribe(&setTwinkleLightsSub);
-
-    getColorSub.setCallback(getColor);
-    mqtt.subscribe(&getColorSub);
-    setColorSub.setCallback(setColor);
-    mqtt.subscribe(&setColorSub);
-    getTwinkleLightsSub.setCallback(getTwinkleLights);
-    mqtt.subscribe(&getTwinkleLightsSub);
-    setTwinkleLightsSub.setCallback(setTwinkleLights);
-    mqtt.subscribe(&setTwinkleLightsSub);
 
     // Configure RTOS
     shortActionsQueue = xQueueCreate(3, sizeof(SubscriptionAction_t));

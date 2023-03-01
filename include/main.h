@@ -7,11 +7,7 @@
 #include <ArduinoJson.h>
 #include "led.h"
 
-#define TW1_PIN 33
-#define TW2_PIN 15
-#define TW3_PIN 32
-#define NEO_PIXEL_PIN 14
-#define NEO_PIXEL_COUNT 16
+
 #define READ_SUBSCRIPTION_TIMEOUT 2000
 
 typedef struct SubscriptionAction {
