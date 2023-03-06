@@ -47,6 +47,9 @@ QueueHandle_t longActionQueue = NULL;
 // Mutexes
 SemaphoreHandle_t ringMutex;
 
+//==============================================================================
+// Main
+
 // Mqtt client config
 esp_mqtt_client_config_t mqtt_config = {
     .event_loop_handle = &mqttTaskHandle,
@@ -57,9 +60,6 @@ esp_mqtt_client_config_t mqtt_config = {
     .task_stack = 6144,
     .buffer_size = 2048,
 };
-
-//==============================================================================
-// Main
 
 static void stop(const __FlashStringHelper *message = NULL)
 {
