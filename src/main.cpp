@@ -70,7 +70,7 @@ static void stop(const __FlashStringHelper *message = NULL)
     while(1);
 }
 
-// NOTE: Set up is excuted on core #1
+// NOTE: setup is excuted on core #1
 void setup()
 {
     Serial.begin(115200);
@@ -153,5 +153,5 @@ void setup()
     vTaskDelete(NULL);
 }
 
-// NOTE: Loop is excuted on core #1
+// NOTE: loop is excuted on core #1
 void loop() {}
