@@ -25,7 +25,7 @@
 // Helpers
 
 // Shorter topics must come before longer topics
-static RGB_TREE_CALLBACK_TYPE getCallbackType(esp_mqtt_event_handle_t event)
+static rgb_tree_callback_type_t getCallbackType(esp_mqtt_event_handle_t event)
 {
     if (strncmp(SUB_SET_COLOR, event->topic, event->topic_len) == 0) {
         return SET_COLOR;
