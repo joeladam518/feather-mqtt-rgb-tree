@@ -22,6 +22,82 @@
 #endif
 
 //==============================================================================
+// Helpers
+
+// Shorter topics must come before longer topics
+static RGB_TREE_CALLBACK_TYPE getCallbackType(esp_mqtt_event_handle_t event)
+{
+    if (strncmp(SUB_SET_COLOR, event->topic, event->topic_len) == 0) {
+        return SET_COLOR;
+    }
+
+    if (strncmp(SUB_GET_COLOR, event->topic, event->topic_len) == 0) {
+        return GET_COLOR;
+    }
+
+    if (strncmp(SUB_SET_TW_LIGHTS, event->topic, event->topic_len) == 0) {
+        return SET_TW;
+    }
+
+    if (strncmp(SUB_GET_TW_LIGHTS, event->topic, event->topic_len) == 0) {
+        return GET_TW;
+    }
+
+    return UNKNOWN;
+}
+
+static bool isShortTask(rgb_tree_callback_type_t type) {
+    if (type == GET_COLOR || type == GET_TW || type == SET_TW) {
+        return true;
+    }
+
+    return false;
+}
+
+static bool isLongTask(rgb_tree_callback_type_t type)
+{
+    if (type == SET_COLOR) {
+        return true;
+    }
+
+    return false;
+}
+
+static void clearAction(SubscriptionAction_t *action)
+{
+    action->callbackType = UNKNOWN;
+    action->client = NULL;
+    memset(action->data, '\0', SUBSCRIPTIONDATALEN);
+    action->dataLength = 0;
+}
+
+static SubscriptionAction_t* createAction(rgb_tree_callback_type_t type, esp_mqtt_event_handle_t event)
+{
+    if (SUBSCRIPTIONDATALEN < event->data_len) {
+        Serial.println("Data length was too long");
+        return NULL;
+    }
+
+    SubscriptionAction_t *action;
+    action = (SubscriptionAction_t *)malloc(sizeof(SubscriptionAction_t));
+
+    if (!action) {
+        Serial.println("Memory exhausted");
+        ESP_LOGE(MQTT_TAG,"%s(%d): %s",  __FUNCTION__, __LINE__, "Memory exhausted");
+        return NULL;
+    }
+
+    clearAction(action);
+
+    action->callbackType = type;
+    action->client = event->client;
+    strncpy(action->data, (char *)event->data, event->data_len);
+    action->dataLength = event->data_len;
+
+    return action;
+}
+
+//==============================================================================
 // Mqtt publish functions
 
 void publishRgbStatus(void)
@@ -185,7 +261,6 @@ void setTwinkleLights(SubscriptionAction_t *action)
         return;
     }
 
-
     if (doc.containsKey("tw1")) {
         uint8_t tw1 = doc["tw1"].as<uint8_t>();
 
@@ -221,79 +296,6 @@ void setTwinkleLights(SubscriptionAction_t *action)
 
 //==============================================================================
 // Process Tasks
-
-// Shorter topics must come before longer topics
-static RGB_TREE_CALLBACK_TYPE getCallbackType(esp_mqtt_event_handle_t event)
-{
-    if (strncmp(SUB_SET_COLOR, event->topic, event->topic_len) == 0) {
-        return SET_COLOR;
-    }
-
-    if (strncmp(SUB_GET_COLOR, event->topic, event->topic_len) == 0) {
-        return GET_COLOR;
-    }
-
-    if (strncmp(SUB_SET_TW_LIGHTS, event->topic, event->topic_len) == 0) {
-        return SET_TW;
-    }
-
-    if (strncmp(SUB_GET_TW_LIGHTS, event->topic, event->topic_len) == 0) {
-        return GET_TW;
-    }
-
-    return UNKNOWN;
-}
-
-static bool isShortTask(rgb_tree_callback_type_t type) {
-    if (type == GET_COLOR || type == GET_TW || type == SET_TW) {
-        return true;
-    }
-
-    return false;
-}
-
-static bool isLongTask(rgb_tree_callback_type_t type)
-{
-    if (type == SET_COLOR) {
-        return true;
-    }
-
-    return false;
-}
-
-static void clearAction(SubscriptionAction_t *action)
-{
-    action->callbackType = UNKNOWN;
-    action->client = NULL;
-    memset(action->data, '\0', SUBSCRIPTIONDATALEN);
-    action->dataLength = 0;
-}
-
-static SubscriptionAction_t* createAction(rgb_tree_callback_type_t type, esp_mqtt_event_handle_t event)
-{
-    if (SUBSCRIPTIONDATALEN < event->data_len) {
-        Serial.println("Data length was too long");
-        return NULL;
-    }
-
-    SubscriptionAction_t *action;
-    action = (SubscriptionAction_t *)malloc(sizeof(SubscriptionAction_t));
-
-    if (!action) {
-        Serial.println("Memory exhausted");
-        ESP_LOGE(MQTT_TAG,"%s(%d): %s",  __FUNCTION__, __LINE__, "Memory exhausted");
-        return NULL;
-    }
-
-    clearAction(action);
-
-    action->callbackType = type;
-    action->client = event->client;
-    strncpy(action->data, (char *)event->data, event->data_len);
-    action->dataLength = event->data_len;
-
-    return action;
-}
 
 void processShortTask(void *parameter)
 {
