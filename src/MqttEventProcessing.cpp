@@ -71,30 +71,22 @@ static void clearAction(SubscriptionAction_t *action)
     action->dataLength = 0;
 }
 
-static SubscriptionAction_t* createAction(rgb_tree_callback_type_t type, esp_mqtt_event_handle_t event)
-{
+static void setAction(
+    SubscriptionAction_t *action,
+    rgb_tree_callback_type_t type,
+    esp_mqtt_event_handle_t event
+) {
+    clearAction(action);
+
     if (SUBSCRIPTIONDATALEN < event->data_len) {
         Serial.println("Data length was too long");
-        return NULL;
+        return;
     }
-
-    SubscriptionAction_t *action;
-    action = (SubscriptionAction_t *)malloc(sizeof(SubscriptionAction_t));
-
-    if (!action) {
-        Serial.println("Memory exhausted");
-        ESP_LOGE(MQTT_TAG,"%s(%d): %s",  __FUNCTION__, __LINE__, "Memory exhausted");
-        return NULL;
-    }
-
-    clearAction(action);
 
     action->callbackType = type;
     action->client = event->client;
     strncpy(action->data, (char *)event->data, event->data_len);
     action->dataLength = event->data_len;
-
-    return action;
 }
 
 //==============================================================================
@@ -299,7 +291,7 @@ void setTwinkleLights(SubscriptionAction_t *action)
 
 void processShortTask(void *parameter)
 {
-    SubscriptionAction_t *action;
+    SubscriptionAction_t action;
 
     while (1) {
         if (xQueueReceive(shortActionQueue, &action, 0) == pdTRUE) {
@@ -308,22 +300,21 @@ void processShortTask(void *parameter)
                 printSubscriptionAction(action);
             #endif
 
-            switch(action->callbackType) {
+            switch(action.callbackType) {
                 case GET_COLOR:
-                    getColor(action);
+                    getColor(&action);
                     break;
                 case GET_TW:
-                    getTwinkleLights(action);
+                    getTwinkleLights(&action);
                     break;
                 case SET_TW:
-                    setTwinkleLights(action);
+                    setTwinkleLights(&action);
                     break;
                 default:
                     Serial.println(F("processShortTask() did not call any callback"));
             }
 
-            clearAction(action);
-            free(action);
+            clearAction(&action);
 
             #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
                 Serial.println(F(""));
@@ -336,7 +327,7 @@ void processShortTask(void *parameter)
 
 void processLongTask(void *parameter)
 {
-    SubscriptionAction_t *action;
+    SubscriptionAction_t action;
 
     while (1) {
         if (xQueueReceive(longActionQueue, &action, 0) == pdTRUE) {
@@ -345,16 +336,15 @@ void processLongTask(void *parameter)
                 printSubscriptionAction(action);
             #endif
 
-            switch(action->callbackType) {
+            switch(action.callbackType) {
                 case SET_COLOR:
-                    setColor(action);
+                    setColor(&action);
                     break;
                 default:
                     Serial.println(F("processLongTask() did not call any callback"));
             }
 
-            clearAction(action);
-            free(action);
+            clearAction(&action);
 
             #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
                 Serial.println(F(""));
@@ -393,25 +383,20 @@ static void mqtt_handle_data_event(esp_mqtt_event_handle_t event)
         Serial.println("");
     #endif
 
+    SubscriptionAction_t action;
     rgb_tree_callback_type_t callbackType = getCallbackType(event);
 
     if (isShortTask(callbackType)) {
-        SubscriptionAction_t *action = createAction(callbackType, event);
-
-        if (action) {
+        setAction(&action, callbackType, event);
+        if (action.callbackType != UNKNOWN && action.client != NULL) {
             xQueueSend(shortActionQueue, &action, portMAX_DELAY);
-        } else {
-            Serial.println("FAILED TO SEND THE ACTION");
         }
     }
 
     if (isLongTask(callbackType)) {
-        SubscriptionAction_t *action = createAction(callbackType, event);
-
-        if (action) {
+        setAction(&action, callbackType, event);
+        if (action.callbackType != UNKNOWN && action.client != NULL) {
             xQueueSend(longActionQueue, &action, portMAX_DELAY);
-        } else {
-            Serial.println("FAILED TO SEND THE ACTION");
         }
     }
 
