@@ -16,7 +16,10 @@
 #include "led.h"
 #include "MqttEventProcessing.h"
 #include "NeoPixelRing.h"
+
+#if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
 #include "debug.h"
+#endif
 
 //==============================================================================
 // Mqtt publish functions

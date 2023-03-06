@@ -5,46 +5,38 @@
 #include <ArduinoJson.h>
 #include "MqttEventProcessing.h"
 
-#if defined(DEBUG) && DEBUG
-    // Do I need to add somthing here?
-#endif
+void printDeserializeError(DeserializationError *error)
+{
+    Serial.print(F("Arduino Json eserialization error: "));
+    Serial.println(error->c_str());
+}
 
-#if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
-    void printMqttMessageData(char *topic, uint16_t topic_length, char *data, uint16_t data_length)
-    {
-        Serial.print(F("Topic: "));
-        Serial.printf("%.*s\n", topic_length, topic);
-        Serial.print(F("Topic Length: "));
-        Serial.println(topic_length);
-        Serial.print(F("Data: "));
-        Serial.printf("%.*s\n", data_length, data);
-        Serial.print(F("Data Length: "));
-        Serial.println(data_length);
-    }
+void printMqttMessageData(char *topic, uint16_t topic_length, char *data, uint16_t data_length)
+{
+    Serial.print(F("Topic: "));
+    Serial.printf("%.*s\n", topic_length, topic);
+    Serial.print(F("Topic Length: "));
+    Serial.println(topic_length);
+    Serial.print(F("Data: "));
+    Serial.printf("%.*s\n", data_length, data);
+    Serial.print(F("Data Length: "));
+    Serial.println(data_length);
+}
 
-    void printSubscriptionAction(SubscriptionAction_t *action)
-    {
-        Serial.print(F("Callback Type: "));
-        Serial.println(action->callbackType);
-        Serial.print(F("Data: "));
-        Serial.println(action->data);
-        Serial.print(F("Length: "));
-        Serial.println(action->dataLength);
-    }
+void printSubscriptionAction(SubscriptionAction_t *action)
+{
+    Serial.print(F("Callback Type: "));
+    Serial.println(action->callbackType);
+    Serial.print(F("Data: "));
+    Serial.println(action->data);
+    Serial.print(F("Length: "));
+    Serial.println(action->dataLength);
+}
 
-    void printSubscriptionCallbackData(char *data, uint16_t length)
-    {
-        Serial.print(F("Data: "));
-        Serial.println(data);
-        Serial.print(F("Length: "));
-        Serial.println(length);
-    }
-
-    void printDeserializeError(DeserializationError *error)
-    {
-        Serial.print(F("Arduino Json eserialization error: "));
-        Serial.println(error->c_str());
-    }
-#endif
-
-
+void printSubscriptionCallbackData(char *data, uint16_t length)
+{
+    Serial.print(F("Data: "));
+    Serial.println(data);
+    Serial.print(F("Length: "));
+    Serial.println(length);
+}
