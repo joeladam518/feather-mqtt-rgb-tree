@@ -1,3 +1,6 @@
+#include "config.h"
+#include "globals.h"
+
 #include <Arduino.h>
 #include <HardwareSerial.h>
 #include <Adafruit_NeoPixel.h>

@@ -5,6 +5,7 @@
 .vscode/launch.json
 .vscode/ipch
 .vscode/extensions.json
+.vscode/settings.json
 
 # ignore config
 include/config.h

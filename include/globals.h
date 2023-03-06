@@ -1,5 +1,5 @@
-#ifndef GLOBALS_H
-#define GLOBALS_H
+#ifndef __RGB_TREE_GLOBALS_H__
+#define __RGB_TREE_GLOBALS_H__
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -15,7 +15,6 @@
 
 // Wifi client
 extern WiFiClient wifiClient;
-
 // Mqtt client
 extern esp_mqtt_client_handle_t mqttClient;
 
@@ -24,11 +23,11 @@ extern Adafruit_NeoPixel neoPixel;
 extern NeoPixelRing ring;
 
 // freertos variables
-extern TaskHandle_t processShortActionsTaskHandle;
-extern TaskHandle_t processLongActionsTaskHandle;
-extern TaskHandle_t processInputTaskHandle;
-extern QueueHandle_t shortActionsQueue;
-extern QueueHandle_t longActionsQueue;
+extern TaskHandle_t mqttMTaskHandle;
+extern TaskHandle_t processShortTaskHandle;
+extern TaskHandle_t processLongTaskHandle;
+extern QueueHandle_t shortActionQueue;
+extern QueueHandle_t longActionQueue;
 extern SemaphoreHandle_t ringMutex;
 
 #endif
