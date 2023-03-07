@@ -388,16 +388,14 @@ static void mqtt_handle_data_event(esp_mqtt_event_handle_t event)
         if (action.callbackType != UNKNOWN && action.client != NULL) {
             xQueueSend(shortActionQueue, &action, portMAX_DELAY);
         }
-    }
-
-    if (isLongTask(callbackType)) {
+    } else if (isLongTask(callbackType)) {
         setAction(&action, callbackType, event);
         if (action.callbackType != UNKNOWN && action.client != NULL) {
             xQueueSend(longActionQueue, &action, portMAX_DELAY);
         }
+    } else {
+        ESP_LOGI(MQTT_TAG, "Topic was unhandled");
     }
-
-    ESP_LOGI(MQTT_TAG, "Topic was unhandled");
 }
 
 void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
