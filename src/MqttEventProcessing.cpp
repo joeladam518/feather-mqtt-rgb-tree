@@ -17,7 +17,7 @@
 #include "MqttEventProcessing.h"
 #include "NeoPixelRing.h"
 
-#if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+#if defined(APP_DEBUG) && APP_DEBUG
 #include "debug.h"
 #endif
 
@@ -25,7 +25,7 @@
 // Helpers
 
 // Shorter topics must come before longer topics
-static rgb_tree_callback_type_t getCallbackType(esp_mqtt_event_handle_t event)
+static SubsctiptionCallbackType_t getCallbackType(esp_mqtt_event_handle_t event)
 {
     if (strncmp(SUB_SET_COLOR, event->topic, event->topic_len) == 0) {
         return SET_COLOR;
@@ -46,7 +46,7 @@ static rgb_tree_callback_type_t getCallbackType(esp_mqtt_event_handle_t event)
     return UNKNOWN;
 }
 
-static bool isShortTask(rgb_tree_callback_type_t type) {
+static bool isShortTask(SubsctiptionCallbackType_t type) {
     if (type == GET_COLOR || type == GET_TW || type == SET_TW) {
         return true;
     }
@@ -54,7 +54,7 @@ static bool isShortTask(rgb_tree_callback_type_t type) {
     return false;
 }
 
-static bool isLongTask(rgb_tree_callback_type_t type)
+static bool isLongTask(SubsctiptionCallbackType_t type)
 {
     if (type == SET_COLOR) {
         return true;
@@ -73,7 +73,7 @@ static void clearAction(SubscriptionAction_t *action)
 
 static void setAction(
     SubscriptionAction_t *action,
-    rgb_tree_callback_type_t type,
+    SubsctiptionCallbackType_t type,
     esp_mqtt_event_handle_t event
 ) {
     clearAction(action);
@@ -94,30 +94,29 @@ static void setAction(
 
 void publishRgbStatus(void)
 {
-    #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+    #if defined(APP_DEBUG) && APP_DEBUG
         Serial.println(F("publishRgbStatus()"));
     #endif
 
     char output[SUBSCRIPTIONDATALEN];
     const int capacity = JSON_OBJECT_SIZE(3);
     StaticJsonDocument<capacity> doc;
+    RGB_t color = {0, 0, 0};
 
     if (xSemaphoreTake(ringMutex, 0) == pdTRUE) {
-        RGB_t color = {0, 0, 0};
         ring.getColor(&color);
-
-        doc["r"] = color.r;
-        doc["g"] = color.g;
-        doc["b"] = color.b;
-
         xSemaphoreGive(ringMutex);
     } else {
-        #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+        #if defined(APP_DEBUG) && APP_DEBUG
             Serial.println(F("The ring is already taken."));
         #endif
 
         return;
     }
+
+    doc["r"] = color.r;
+    doc["g"] = color.g;
+    doc["b"] = color.b;
 
     serializeJson(doc, output, sizeof(output));
     esp_mqtt_client_publish(mqttClient, PUB_GET_COLOR, output, 0, 0, 0);
@@ -125,7 +124,7 @@ void publishRgbStatus(void)
 
 void publishTwinkleLightStatus(void)
 {
-    #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+    #if defined(APP_DEBUG) && APP_DEBUG
         Serial.println(F("publishTwinkleLightStatus()"));
     #endif
 
@@ -146,12 +145,12 @@ void publishTwinkleLightStatus(void)
 
 void getColor(SubscriptionAction_t *action)
 {
-    #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+    #if defined(APP_DEBUG) && APP_DEBUG
         Serial.println("getColor()");
     #endif
 
     if (SUBSCRIPTIONDATALEN < action->dataLength) {
-        #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+        #if defined(APP_DEBUG) && APP_DEBUG
             Serial.println(F("data is larger than max legnth. Can not parse."));
         #endif
 
@@ -163,12 +162,12 @@ void getColor(SubscriptionAction_t *action)
 
 void setColor(SubscriptionAction_t *action)
 {
-    #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+    #if defined(APP_DEBUG) && APP_DEBUG
         Serial.println("setColor()");
     #endif
 
     if (SUBSCRIPTIONDATALEN < action->dataLength) {
-        #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+        #if defined(APP_DEBUG) && APP_DEBUG
             Serial.println(F("data is larger than max legnth. Can not parse."));
         #endif
 
@@ -180,7 +179,7 @@ void setColor(SubscriptionAction_t *action)
     DeserializationError error = deserializeJson(doc, action->data);
 
     if (error) {
-        #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+        #if defined(APP_DEBUG) && APP_DEBUG
             printDeserializeError(&error);
         #endif
 
@@ -200,11 +199,9 @@ void setColor(SubscriptionAction_t *action)
         }
         xSemaphoreGive(ringMutex);
     } else {
-        #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+        #if defined(APP_DEBUG) && APP_DEBUG
             Serial.println(F("The ring is already taken. setColor()"));
         #endif
-
-        return;
     }
 
     publishRgbStatus();
@@ -212,12 +209,12 @@ void setColor(SubscriptionAction_t *action)
 
 void getTwinkleLights(SubscriptionAction_t *action)
 {
-    #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+    #if defined(APP_DEBUG) && APP_DEBUG
         Serial.println("getTwinkleLights()");
     #endif
 
     if (SUBSCRIPTIONDATALEN < action->dataLength) {
-        #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+        #if defined(APP_DEBUG) && APP_DEBUG
             Serial.println(F("data is larger than max legnth. Can not parse."));
         #endif
 
@@ -229,12 +226,12 @@ void getTwinkleLights(SubscriptionAction_t *action)
 
 void setTwinkleLights(SubscriptionAction_t *action)
 {
-    #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+    #if defined(APP_DEBUG) && APP_DEBUG
         Serial.println("setTwinkleLights()");
     #endif
 
     if (SUBSCRIPTIONDATALEN < action->dataLength) {
-        #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+        #if defined(APP_DEBUG) && APP_DEBUG
             Serial.println(F("data is larger than max legnth. Can not parse."));
         #endif
 
@@ -246,7 +243,7 @@ void setTwinkleLights(SubscriptionAction_t *action)
     DeserializationError error = deserializeJson(doc, action->data);
 
     if (error) {
-        #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+        #if defined(APP_DEBUG) && APP_DEBUG
             printDeserializeError(&error);
         #endif
 
@@ -295,7 +292,7 @@ void processShortTask(void *parameter)
 
     while (1) {
         if (xQueueReceive(shortActionQueue, &action, 0) == pdTRUE) {
-            #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+            #if defined(APP_DEBUG) && APP_DEBUG
                 Serial.println(F("processShortTask()"));
                 printSubscriptionAction(action);
             #endif
@@ -316,7 +313,7 @@ void processShortTask(void *parameter)
 
             clearAction(&action);
 
-            #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+            #if defined(APP_DEBUG) && APP_DEBUG
                 Serial.println(F(""));
             #endif
         }
@@ -331,7 +328,7 @@ void processLongTask(void *parameter)
 
     while (1) {
         if (xQueueReceive(longActionQueue, &action, 0) == pdTRUE) {
-            #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+            #if defined(APP_DEBUG) && APP_DEBUG
                 Serial.println(F("processLongTask()"));
                 printSubscriptionAction(action);
             #endif
@@ -346,7 +343,7 @@ void processLongTask(void *parameter)
 
             clearAction(&action);
 
-            #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+            #if defined(APP_DEBUG) && APP_DEBUG
                 Serial.println(F(""));
             #endif
         }
@@ -377,14 +374,14 @@ static void mqtt_subsribe_all(esp_mqtt_client_handle_t client)
 
 static void mqtt_handle_data_event(esp_mqtt_event_handle_t event)
 {
-    #if defined(RGB_TREE_DEBUG) && RGB_TREE_DEBUG
+    #if defined(APP_DEBUG) && APP_DEBUG
         Serial.println(F("mqtt_handle_data_event()"));
         printMqttMessageData(event->topic, event->topic_len, event->data, event->data_len);
         Serial.println("");
     #endif
 
     SubscriptionAction_t action;
-    rgb_tree_callback_type_t callbackType = getCallbackType(event);
+    SubsctiptionCallbackType_t callbackType = getCallbackType(event);
 
     if (isShortTask(callbackType)) {
         setAction(&action, callbackType, event);

@@ -5,7 +5,7 @@
 
 // Debug
 #define DEBUG false // This will trigger other library's debug functionality
-#define RGB_TREE_DEBUG false
+#define APP_DEBUG false
 
 // Wifi
 #define WLAN_SSID ""

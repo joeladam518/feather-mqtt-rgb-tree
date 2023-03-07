@@ -17,6 +17,7 @@
 
 // Wifi client
 WiFiClient wifiClient;
+
 // Mqtt client
 esp_mqtt_client_handle_t mqttClient;
 
@@ -45,7 +46,7 @@ QueueHandle_t shortActionQueue = NULL;
 QueueHandle_t longActionQueue = NULL;
 
 // Mutexes
-SemaphoreHandle_t ringMutex;
+SemaphoreHandle_t ringMutex = NULL;
 
 //==============================================================================
 // Main
@@ -74,9 +75,6 @@ static void stop(const __FlashStringHelper *message = NULL)
 void setup()
 {
     Serial.begin(115200);
-    vTaskDelay(500 / portTICK_PERIOD_MS);
-
-    esp_log_level_set(MQTT_TAG, ESP_LOG_VERBOSE);
     vTaskDelay(500 / portTICK_PERIOD_MS);
 
     // Connect to Wifi
@@ -133,13 +131,13 @@ void setup()
         APP_CPU_NUM              // Run on core
     );
     xTaskCreatePinnedToCore(
-        processLongTask,        // Function to be called
-        "Process Long Actions", // Name of task
-        2048,                   // Stack size (bytes in ESP32, words in FreeRTOS)
-        NULL,                   // Parameter to pass to function
-        1,                      // Task priority (0 to configMAX_PRIORITIES - 1)
-        &processLongTaskHandle, // Task handle
-        APP_CPU_NUM             // Run on core
+        processLongTask,         // Function to be called
+        "Process Long Actions",  // Name of task
+        2048,                    // Stack size (bytes in ESP32, words in FreeRTOS)
+        NULL,                    // Parameter to pass to function
+        1,                       // Task priority (0 to configMAX_PRIORITIES - 1)
+        &processLongTaskHandle,  // Task handle
+        APP_CPU_NUM              // Run on core
     );
 
     // Start the mqtt task

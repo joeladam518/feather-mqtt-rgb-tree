@@ -1,6 +1,8 @@
 #ifndef __RGB_TREE_GLOBALS_H__
 #define __RGB_TREE_GLOBALS_H__
 
+#include "config.h"
+
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
@@ -10,11 +12,11 @@
 #include <mqtt_client.h>
 #include <Adafruit_NeoPixel.h>
 
-#include "config.h"
 #include "NeoPixelRing.h"
 
 // Wifi client
 extern WiFiClient wifiClient;
+
 // Mqtt client
 extern esp_mqtt_client_handle_t mqttClient;
 
