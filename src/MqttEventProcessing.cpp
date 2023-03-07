@@ -294,7 +294,7 @@ void processShortTask(void *parameter)
         if (xQueueReceive(shortActionQueue, &action, 0) == pdTRUE) {
             #if defined(APP_DEBUG) && APP_DEBUG
                 Serial.println(F("processShortTask()"));
-                printSubscriptionAction(action);
+                printSubscriptionAction(&action);
             #endif
 
             switch(action.callbackType) {
@@ -330,7 +330,7 @@ void processLongTask(void *parameter)
         if (xQueueReceive(longActionQueue, &action, 0) == pdTRUE) {
             #if defined(APP_DEBUG) && APP_DEBUG
                 Serial.println(F("processLongTask()"));
-                printSubscriptionAction(action);
+                printSubscriptionAction(&action);
             #endif
 
             switch(action.callbackType) {
